@@ -5,8 +5,8 @@ import numpy as np
 import torch
 
 from sidechainnet.utils.sequence import ONE_TO_THREE_LETTER_MAP, VOCAB
-from sidechainnet.structure.build_info import SC_BUILD_INFO, BB_BUILD_INFO, NUM_COORDS_PER_RES, SC_ANGLES_START_POS, NUM_ANGLES
 from sidechainnet.structure.structure import nerf
+from sidechainnet.structure.build_info import SC_BUILD_INFO, BB_BUILD_INFO, NUM_COORDS_PER_RES, SC_ANGLES_START_POS, NUM_ANGLES
 from sidechainnet.structure.HydrogenBuilder import HydrogenBuilder, NUM_COORDS_PER_RES_W_HYDROGENS
 
 
@@ -22,6 +22,7 @@ class StructureBuilder(object):
     def __init__(self,
                  seq,
                  ang=None,
+                 bbb_len=None,
                  crd=None,
                  device=torch.device("cpu"),
                  nerf_method="standard"):
@@ -36,6 +37,8 @@ class StructureBuilder(object):
                 amino acid sequence.
             ang: A float tensor (L X NUM_PREDICTED_ANGLES) that contains all of the
                 protein's interior angles.
+            bbb_len: A float tensor (L X 3) that contains the backbone bond lengths
+                for the protein
             crd: A float tensor ((L X NUM_COORDS_PER_RES) X 3) that contains all of the
                 protein's atomic coordinates. Each residue must contain the same number
                 of coordinates, with empty coordinate entries padded with 0-vectors.
@@ -59,6 +62,11 @@ class StructureBuilder(object):
         elif crd is None and ang is not None:
             self.coords = None
             self.ang = ang
+            if bbb_len is None:
+                self.use_predefined_blen = True
+            else:
+                self.use_predefined_blen = False
+                self.bbb_len = bbb_len
             if len(self.ang.shape) == 3:
                 raise ValueError("Batches of structures are not supported by "
                                  "StructureBuilder. See BatchedStructureBuilder instead.")
@@ -113,18 +121,23 @@ class StructureBuilder(object):
         """
         return len(self.seq_as_str)
 
-    def _iter_resname_angs(self, start=0):
-        for resname, angles in zip(self.seq_as_ints[start:], self.ang[start:]):
-            yield resname, angles
+    def _iter_resname_angs_bonds(self, start=0):
+        if self.use_predefined_blen:
+            for resname, angles in zip(self.seq_as_ints[start:], self.ang[start:]):
+                yield resname, angles, None
+        else:
+            for resname, angles, blens in zip(self.seq_as_ints[start:], self.ang[start:], self.bbb_len[start:]):
+                yield resname, angles, blens
 
     def _build_first_two_residues(self):
         """Construct the first two residues of the protein."""
-        resname_ang_iter = self._iter_resname_angs()
-        first_resname, first_ang = next(resname_ang_iter)
-        second_resname, second_ang = next(resname_ang_iter)
-        first_res = ResidueBuilder(first_resname, first_ang, prev_res=None, next_res=None)
+        resname_ang_iter = self._iter_resname_angs_bonds()
+        first_resname, first_ang, first_blen = next(resname_ang_iter)
+        second_resname, second_ang, second_blen = next(resname_ang_iter)
+        first_res = ResidueBuilder(first_resname, first_ang, first_blen, prev_res=None, next_res=None)
         second_res = ResidueBuilder(second_resname,
                                     second_ang,
+                                    second_blen,
                                     prev_res=first_res,
                                     next_res=None)
 
@@ -158,9 +171,10 @@ class StructureBuilder(object):
 
         # Build the rest of the structure
         prev_res = second
-        for i, (resname, ang) in enumerate(self._iter_resname_angs(start=2)):
+        for i, (resname, ang, blen) in enumerate(self._iter_resname_angs_bonds(start=2)):
             res = ResidueBuilder(resname,
                                  ang,
+                                 blen,
                                  prev_res=prev_res,
                                  next_res=None,
                                  is_last_res=i + 2 == len(self.seq_as_str) - 1)
@@ -259,6 +273,7 @@ class ResidueBuilder(object):
     def __init__(self,
                  name,
                  angles,
+                 blens,
                  prev_res,
                  next_res,
                  is_last_res=False,
@@ -271,6 +286,7 @@ class ResidueBuilder(object):
         Args:
             name: The integer amino acid code for this residue.
             angles: A float tensor containing necessary angles to define this residue.
+            blens: A float tensor containing necessary bond lengths to define this residue.
             prev_bb: Coordinate tensor (3 x 3) of previous residue, upon which this
                 residue is extending.
             prev_ang : Angle tensor (1 X NUM_PREDICTED_ANGLES) of previous reside, upon
@@ -288,6 +304,7 @@ class ResidueBuilder(object):
             angles = torch.tensor(angles, dtype=torch.float32)
         self.name = name
         self.ang = angles.squeeze()
+        self.blens = blens.squeeze() if blens is not None else None
         self.prev_res = prev_res
         self.next_res = next_res
         self.device = device
@@ -316,30 +333,40 @@ class ResidueBuilder(object):
             self.bb = self._init_bb()
         else:
             pts = [self.prev_res.bb[0], self.prev_res.bb[1], self.prev_res.bb[2]]
+            if self.blens is None:
+                c_n_bond_length = BB_BUILD_INFO["BONDLENS"]["c-n"]
+                n_ca_bond_length = BB_BUILD_INFO["BONDLENS"]["n-ca"]
+                ca_c_bond_length = BB_BUILD_INFO["BONDLENS"]["ca-c"]
+                previous_ca_c_bond_length = BB_BUILD_INFO["BONDLENS"]["ca-c"]
+            else:
+                c_n_bond_length = self.blens[0]
+                n_ca_bond_length = self.blens[1]
+                ca_c_bond_length = self.blens[2]
+                previous_ca_c_bond_length = self.prev_res.blens[2]
             for j in range(4):
                 if j == 0:
                     # Placing N
                     t = self.prev_res.ang[4]  # thetas["ca-c-n"]
-                    b = BB_BUILD_INFO["BONDLENS"]["c-n"]
-                    pb = BB_BUILD_INFO["BONDLENS"]["ca-c"]  # pb is previous bond len
+                    b = c_n_bond_length
+                    pb = previous_ca_c_bond_length  # pb is previous bond len
                     dihedral = self.prev_res.ang[1]  # psi of previous residue
                 elif j == 1:
                     # Placing Ca
                     t = self.prev_res.ang[5]  # thetas["c-n-ca"]
-                    b = BB_BUILD_INFO["BONDLENS"]["n-ca"]
-                    pb = BB_BUILD_INFO["BONDLENS"]["c-n"]
+                    b = n_ca_bond_length
+                    pb = c_n_bond_length
                     dihedral = self.prev_res.ang[2]  # omega of previous residue
                 elif j == 2:
                     # Placing C
                     t = self.ang[3]  # thetas["n-ca-c"]
-                    b = BB_BUILD_INFO["BONDLENS"]["ca-c"]
-                    pb = BB_BUILD_INFO["BONDLENS"]["n-ca"]
+                    b = ca_c_bond_length
+                    pb = n_ca_bond_length
                     dihedral = self.ang[0]  # phi of current residue
                 else:
                     # Placing O (carbonyl)
                     t = torch.tensor(BB_BUILD_INFO["BONDANGS"]["ca-c-o"])
                     b = BB_BUILD_INFO["BONDLENS"]["c-o"]
-                    pb = BB_BUILD_INFO["BONDLENS"]["ca-c"]
+                    pb = ca_c_bond_length
                     if self.is_last_res:
                         # we explicitly measure this angle during dataset creation,
                         # no need to invert it here.
@@ -366,11 +393,17 @@ class ResidueBuilder(object):
 
         Placed in an arbitrary plane (z = .001).
         """
+        if self.blens is None:
+            n_ca_bond_length = BB_BUILD_INFO["BONDLENS"]["n-ca"]
+            ca_c_bond_length = BB_BUILD_INFO["BONDLENS"]["ca-c"]
+        else:
+            n_ca_bond_length = self.blens[1]
+            ca_c_bond_length = self.blens[2]
         n = torch.tensor([0, 0, 0.001], device=self.device, requires_grad=True)
-        ca = n + torch.tensor([BB_BUILD_INFO["BONDLENS"]["n-ca"], 0, 0],
+        ca = n + torch.tensor([n_ca_bond_length, 0, 0],
                               device=self.device, requires_grad=True)
-        cx = torch.cos(np.pi - self.ang[3]) * BB_BUILD_INFO["BONDLENS"]["ca-c"]
-        cy = torch.sin(np.pi - self.ang[3]) * BB_BUILD_INFO["BONDLENS"]['ca-c']
+        cx = torch.cos(np.pi - self.ang[3]) * ca_c_bond_length
+        cy = torch.sin(np.pi - self.ang[3]) * ca_c_bond_length
         c = ca + torch.tensor([cx, cy, 0], device=self.device, dtype=torch.float32, requires_grad=True)
         o = nerf(
             n,
@@ -379,7 +412,7 @@ class ResidueBuilder(object):
             torch.tensor(BB_BUILD_INFO["BONDLENS"]["c-o"]),
             torch.tensor(BB_BUILD_INFO["BONDANGS"]["ca-c-o"]),
             self.ang[1] - np.pi,  # opposite to current residue's psi
-            l_bc=torch.tensor(BB_BUILD_INFO["BONDLENS"]["ca-c"]),  # Previous bond length
+            l_bc=torch.tensor(ca_c_bond_length),  # Previous bond length
             nerf_method=self.nerf_method)
         return [n, ca, c, o]
 
@@ -414,6 +447,10 @@ class ResidueBuilder(object):
                 torsion = self.ang[SC_ANGLES_START_POS + i]
             elif type(torsion) is str and torsion == "i" and last_torsion is not None:
                 torsion = last_torsion - np.pi
+
+            # When provided non-standard backbone bond lengths, handle CB atom separately
+            if i == 0 and self.blens is not None:
+                pbond_len = self.blens[1]
 
             new_pt = nerf(a,
                           b,
