@@ -54,32 +54,38 @@ class SCNDataset(object):
         self.idx_to_SCNProtein = {}
 
         # Create SCNProtein objects and add to data structure
-        idx = 0
         for split in self.splits:
             d = data[split]
-            for c, a, s, u, m, e, n, r, z, i in zip(d['crd'], d['ang'], d['seq'],
-                                                    d['ums'], d['msk'], d['evo'],
-                                                    d['sec'], d['res'], d['mod'],
-                                                    d['ids']):
+            for i in range(len(d['crd'])):
+            # for c, a, s, u, m, e, n, r, z, i in zip(d['crd'], d['ang'], d['seq'],
+            #                                         d['ums'], d['msk'], d['evo'],
+            #                                         d['sec'], d['res'], d['mod'],
+            #                                         d['ids']):
                 try:
-                    self.split_to_ids[split].append(i)
+                    self.split_to_ids[split].append(d['ids'][i])
                 except KeyError:
-                    self.split_to_ids[split] = [i]
+                    self.split_to_ids[split] = [d['ids'][i]]
 
-                p = SCNProtein(coordinates=c,
-                               angles=a,
-                               sequence=s,
-                               unmodified_seq=u,
-                               mask=m,
-                               evolutionary=e,
-                               secondary_structure=n,
-                               resolution=r,
-                               is_modified=z,
-                               id=i,
+                if 'blens' in d:
+                    bond_lengths = d['blens'][i]
+                else:
+                    bond_lengths = None
+
+                p = SCNProtein(coordinates=d['crd'][i],
+                               angles=d['ang'][i],
+                               sequence=d['seq'][i],
+                               unmodified_seq=d['ums'][i],
+                               mask=d['msk'][i],
+                               evolutionary=d['evo'][i],
+                               secondary_structure=d['sec'][i],
+                               resolution=d['res'][i],
+                               is_modified=d['mod'][i],
+                               id=d['ids'][i],
+                               bond_lengths=bond_lengths,
                                split=split)
-                self.ids_to_SCNProtein[i] = p
-                self.idx_to_SCNProtein[idx] = p
-                idx += 1
+                self.ids_to_SCNProtein[d['ids'][i]] = p
+                self.idx_to_SCNProtein[i] = p
+
 
     def get_protein_list_by_split_name(self, split_name):
         """Return list of SCNProtein objects belonging to str split_name."""
@@ -133,6 +139,8 @@ class SCNProtein(object):
         super().__init__()
         self.coords = kwargs['coordinates']
         self.angles = kwargs['angles']
+        if kwargs['bond_lengths'] is not None:
+            self.bond_lengths = kwargs['bond_lengths']
         self.seq = kwargs['sequence']
         self.unmodified_seq = kwargs['unmodified_seq']
         self.mask = kwargs['mask']
