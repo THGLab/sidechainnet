@@ -55,7 +55,7 @@ Specifically, SidechainNet adds measurements for protein angles and coordinates 
 <sup>†</sup>Includes a `1` for each residue that has been modified to a standard residue according to the mapping in `sidechainnet.utils.measure.ALLOWED_NONSTD_RESIDUES` (e.g., selenomethionine -> methionine).
 
 ## Installation
-`pip install sidechainnet`
+`cd` to the base folder (where `setup.py` resides) and run `pip install -e .`
 
 ## Usage Examples
 
