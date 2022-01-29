@@ -29,6 +29,7 @@ Specifically, SidechainNet adds measurements for protein angles and coordinates 
 | Backbone bond angles | *L x 3* |  `ang`, subset `[3:6]` |  | X | 
 | Sidechain torsion angles | *L x 6* |   `ang`, subset `[6:12]` |  | X | 
 | Sidechain coordinates | *L x 10 x 3* |  `crd`, subset `[4:14]` |  | X |
+|Backbone bond lengths|*L x 3* | `blens`|| X<sup>†</sup> |
 
 **L* reperesents the length of any given protein in the dataset.
 
@@ -37,6 +38,8 @@ Specifically, SidechainNet adds measurements for protein angles and coordinates 
 <sup>**\*</sup>SidechainNet explicitly includes oxygen atoms as part of the backbone coordinate data in contrast to ProteinNet, which only includes the primary `N, C_alpha, C` atoms.
 
 <sup>§</sup>Stored as string values in the underlying SidechainNet data dictionary.
+
+<sup>†</sup>Not available by default. You need to run `tools/create_sidechainnet_bond_lengths.py` to generate this data. See [here](#creating-bond-lengths-from-the-dataset-pickle-file) for details.
 
 ### Other included data
 
@@ -86,6 +89,10 @@ data = {"train": {"seq": [seq1, seq2, ...],  # Sequences, 1-letter codes
         }
 ```
 By default, the `load` function downloads the data from the web into the current directory and loads it as a Python dictionary. If the data already exists locally, it reads it from disk. Other than the requirement that the data must be loaded using Python, this method of data loading is agnostic to any downstream analysis.
+
+### Creating bond lengths from the dataset pickle file
+
+Bond lengths can be added to the dataset as well. Once the dataset is downloaded, it should be stored as a `.pkl` file under the folder `sidechainnet_data`. Set that pickle file path as `pkl_file` in `tools/create_sidechainnet_bond_lengths.py` and run the script, it will extract bond lengths from coordinates and save them to the same pickle file.
 
 ### Loading SidechainNet as an interactive SCNDataset object
 
