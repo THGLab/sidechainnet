@@ -15,7 +15,8 @@ from sidechainnet.utils.download import MAX_SEQ_LEN
 Batch = collections.namedtuple("Batch",
                                "pids seqs msks evos secs angs "
                                "crds int_seqs seq_evo_sec resolutions is_modified "
-                               "lengths str_seqs")
+                               "lengths str_seqs blens")
+            
 
 
 def get_collate_fn(aggregate_input, seqs_as_onehot=None):
@@ -60,7 +61,11 @@ def get_collate_fn(aggregate_input, seqs_as_onehot=None):
         """
         # Instead of working with a list of tuples, we extract out each category of info
         # so it can be padded and re-provided to the user.
-        pnids, sequences, masks, pssms, secs, angles, coords, resolutions, mods, str_seqs = list(zip(*insts))
+        if len(insts[0]) == 10: # no bond lengths
+            pnids, sequences, masks, pssms, secs, angles, coords, resolutions, mods, str_seqs = list(zip(*insts))
+            bond_lens = None
+        elif len(insts[0]) == 11: # the last one is bond length
+            pnids, sequences, masks, pssms, secs, angles, coords, resolutions, mods, str_seqs, bond_lens = list(zip(*insts))
         lengths = tuple(len(s) for s in sequences)
         max_batch_len = max(lengths)
 
@@ -85,6 +90,14 @@ def get_collate_fn(aggregate_input, seqs_as_onehot=None):
         padded_crds = pad_for_batch(coords, max_batch_len, 'crd')
         padded_mods = pad_for_batch(mods, max_batch_len, 'msk')
 
+        if bond_lens is not None:
+            padded_blens = pad_for_batch(bond_lens, max_batch_len, 'ang')  # the data type of bond lengths is the same as angles
+
+        if bond_lens is not None:
+            blens = padded_blens
+        else:
+            blens = None
+
         # Non-aggregated model input
         if not aggregate_input:
             return Batch(pids=pnids,
@@ -99,7 +112,9 @@ def get_collate_fn(aggregate_input, seqs_as_onehot=None):
                          resolutions=resolutions,
                          is_modified=padded_mods,
                          lengths=lengths,
-                         str_seqs=str_seqs)
+                         str_seqs=str_seqs,
+                         blens=blens)
+
 
         # Aggregated model input
         elif aggregate_input:
@@ -119,7 +134,9 @@ def get_collate_fn(aggregate_input, seqs_as_onehot=None):
                          resolutions=resolutions,
                          is_modified=padded_mods,
                          lengths=lengths,
-                         str_seqs=str_seqs)
+                         str_seqs=str_seqs,
+                         blens=blens)
+
 
     return collate_fn
 
