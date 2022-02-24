@@ -339,10 +339,10 @@ class ResidueBuilder(object):
                 ca_c_bond_length = BB_BUILD_INFO["BONDLENS"]["ca-c"]
                 previous_ca_c_bond_length = BB_BUILD_INFO["BONDLENS"]["ca-c"]
             else:
-                c_n_bond_length = self.blens[0]
-                n_ca_bond_length = self.blens[1]
-                ca_c_bond_length = self.blens[2]
-                previous_ca_c_bond_length = self.prev_res.blens[2]
+                c_n_bond_length = self.prev_res.blens[2]
+                n_ca_bond_length = self.blens[0]
+                ca_c_bond_length = self.blens[1]
+                previous_ca_c_bond_length = self.prev_res.blens[1]
             for j in range(4):
                 if j == 0:
                     # Placing N
@@ -397,8 +397,8 @@ class ResidueBuilder(object):
             n_ca_bond_length = BB_BUILD_INFO["BONDLENS"]["n-ca"]
             ca_c_bond_length = BB_BUILD_INFO["BONDLENS"]["ca-c"]
         else:
-            n_ca_bond_length = self.blens[1]
-            ca_c_bond_length = self.blens[2]
+            n_ca_bond_length = self.blens[0]
+            ca_c_bond_length = self.blens[1]
         n = torch.tensor([0, 0, 0.001], device=self.device, requires_grad=True)
         ca = n + torch.tensor([n_ca_bond_length, 0, 0],
                               device=self.device, requires_grad=True)
