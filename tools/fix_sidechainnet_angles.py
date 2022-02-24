@@ -3,6 +3,7 @@ Some of the bond angle data in sidechainnet are not correct,
 which usually are bond angles of CA-C-N and C-N-CA for a residue with the next residue missing
 
 This code set all CA-C-N and C-N-CA bond angles to 0 if the next residue is missing
+ (or at the end of a chain)
 '''
 
 import os
@@ -11,7 +12,7 @@ import numpy as np
 import shutil
 from tqdm import tqdm
 
-pkl_file = '../../sidechainnet_data/sidechainnet_debug.pkl' # the pickle file for processing
+pkl_file = '../../sidechainnet_data/sidechainnet_casp12_30.pkl' # the pickle file for processing
 
 if os.path.exists(pkl_file + '.backup'):
     shutil.copy(pkl_file + '.backup', pkl_file)
@@ -27,6 +28,7 @@ for key in data:
         print(key)
         for idx, mask in enumerate(data[key]['msk']):
             neg_positions = [i for i in range(len(mask)) if mask[i] == '-']
+            neg_positions += [len(mask)]
             for pos in neg_positions:
                 if pos != 0:
                     data[key]['ang'][idx][pos-1, 4:6] = 0
