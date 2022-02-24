@@ -11,7 +11,7 @@ import numpy as np
 import shutil
 from tqdm import tqdm
 
-pkl_file = '../../sidechainnet_data/sidechainnet_casp12_30.pkl' # the pickle file for processing
+pkl_file = '../../sidechainnet_data/sidechainnet_debug.pkl' # the pickle file for processing
 
 if os.path.exists(pkl_file + '.backup'):
     shutil.copy(pkl_file + '.backup', pkl_file)
@@ -29,7 +29,7 @@ for key in data:
             neg_positions = [i for i in range(len(mask)) if mask[i] == '-']
             for pos in neg_positions:
                 if pos != 0:
-                    data[key]['ang'][idx][pos, 4:6] = 0
+                    data[key]['ang'][idx][pos-1, 4:6] = 0
 
 with open(pkl_file, 'wb') as f:
     pickle.dump(data, f)
