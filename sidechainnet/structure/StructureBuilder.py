@@ -129,28 +129,31 @@ class StructureBuilder(object):
             for resname, angles, blens in zip(self.seq_as_ints[start:], self.ang[start:], self.bbb_len[start:]):
                 yield resname, angles, blens
 
-    def _build_first_two_residues(self):
+    def _build_first_two_residues(self, with_sidechain=True):
         """Construct the first two residues of the protein."""
         resname_ang_iter = self._iter_resname_angs_bonds()
         first_resname, first_ang, first_blen = next(resname_ang_iter)
         second_resname, second_ang, second_blen = next(resname_ang_iter)
-        first_res = ResidueBuilder(first_resname, first_ang, first_blen, prev_res=None, next_res=None)
+        first_res = ResidueBuilder(first_resname, first_ang, first_blen, prev_res=None, next_res=None, device=self.device, build_sidechain=with_sidechain)
         second_res = ResidueBuilder(second_resname,
                                     second_ang,
                                     second_blen,
                                     prev_res=first_res,
-                                    next_res=None)
+                                    next_res=None,
+                                    device=self.device,
+                                    build_sidechain=with_sidechain)
 
         # After building both backbones use the second residue's N to build the first's CB
         first_res.build_bb()
         second_res.build()
         first_res.next_res = second_res
-        first_res.build_sc()
+        if with_sidechain:
+            first_res.build_sc()
 
         return first_res, second_res
 
-    def build(self):
-        """Construct all of the atoms for a residue.
+    def build(self, with_sidechain=True):
+        """Construct backbone atoms / all of the atoms for a residue.
 
         Special care must be taken for the first residue in the sequence in
         order to place its CB, if present.
@@ -164,7 +167,7 @@ class StructureBuilder(object):
             return self.coords
 
         # Build the first and second residues, a special case
-        first, second = self._build_first_two_residues()
+        first, second = self._build_first_two_residues(with_sidechain)
 
         # Combine the coordinates and build the rest of the protein
         self.coords = first._stack_coords() + second._stack_coords()
@@ -177,7 +180,9 @@ class StructureBuilder(object):
                                  blen,
                                  prev_res=prev_res,
                                  next_res=None,
-                                 is_last_res=i + 2 == len(self.seq_as_str) - 1)
+                                 is_last_res=i + 2 == len(self.seq_as_str) - 1,
+                                 device=self.device,
+                                 build_sidechain=with_sidechain)
             self.coords += res.build()
             prev_res = res
 
@@ -200,7 +205,7 @@ class StructureBuilder(object):
                                               terminal_atoms=self.terminal_atoms)
             else:
                 self.pdb_creator = PdbBuilder(self.seq_as_str,
-                                              self.coords.detach().numpy(),
+                                              self.coords.detach().cpu().numpy(),
                                               self.atoms_per_res,
                                               terminal_atoms=self.terminal_atoms)
 
@@ -278,7 +283,8 @@ class ResidueBuilder(object):
                  next_res,
                  is_last_res=False,
                  device=torch.device("cpu"),
-                 nerf_method="standard"):
+                 nerf_method="standard",
+                 build_sidechain=True):
         """Initialize a residue builder for building a residue's coordinates from angles.
 
         If prev_{bb, ang} are None, then this is the first residue.
@@ -310,11 +316,12 @@ class ResidueBuilder(object):
         self.device = device
         self.is_last_res = is_last_res
         self.nerf_method = nerf_method
+        self.build_sidechain = build_sidechain
 
         self.bb = []
         self.sc = []
         self.coords = []
-        self.coordinate_padding = torch.zeros(3, requires_grad=True)
+        self.coordinate_padding = torch.zeros(3, requires_grad=True, device=device)
 
     @property
     def AA(self):
@@ -324,7 +331,8 @@ class ResidueBuilder(object):
     def build(self):
         """Construct and return atomic coordinates for this protein."""
         self.build_bb()
-        self.build_sc()
+        if self.build_sidechain:
+            self.build_sc()
         return self._stack_coords()
 
     def build_bb(self):
@@ -364,8 +372,8 @@ class ResidueBuilder(object):
                     dihedral = self.ang[0]  # phi of current residue
                 else:
                     # Placing O (carbonyl)
-                    t = torch.tensor(BB_BUILD_INFO["BONDANGS"]["ca-c-o"])
-                    b = BB_BUILD_INFO["BONDLENS"]["c-o"]
+                    t = torch.tensor(BB_BUILD_INFO["BONDANGS"]["ca-c-o"], device=self.device)
+                    b = torch.tensor(BB_BUILD_INFO["BONDLENS"]["c-o"], device=self.device)
                     pb = ca_c_bond_length
                     if self.is_last_res:
                         # we explicitly measure this angle during dataset creation,
@@ -405,14 +413,16 @@ class ResidueBuilder(object):
         cx = torch.cos(np.pi - self.ang[3]) * ca_c_bond_length
         cy = torch.sin(np.pi - self.ang[3]) * ca_c_bond_length
         c = ca + torch.tensor([cx, cy, 0], device=self.device, dtype=torch.float32, requires_grad=True)
+        l = torch.tensor(BB_BUILD_INFO["BONDLENS"]["c-o"], device=self.device)
+        theta = torch.tensor(BB_BUILD_INFO["BONDANGS"]["ca-c-o"], device=self.device)
         o = nerf(
             n,
             ca,
             c,
-            torch.tensor(BB_BUILD_INFO["BONDLENS"]["c-o"]),
-            torch.tensor(BB_BUILD_INFO["BONDANGS"]["ca-c-o"]),
+            l,
+            theta,
             self.ang[1] - np.pi,  # opposite to current residue's psi
-            l_bc=torch.tensor(ca_c_bond_length),  # Previous bond length
+            l_bc=ca_c_bond_length,  # Previous bond length
             nerf_method=self.nerf_method)
         return [n, ca, c, o]
 
