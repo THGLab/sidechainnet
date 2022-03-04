@@ -321,7 +321,7 @@ class ResidueBuilder(object):
         self.bb = []
         self.sc = []
         self.coords = []
-        self.coordinate_padding = torch.zeros(3, requires_grad=True, device=device)
+        self.coordinate_padding = torch.zeros(3, requires_grad=False, device=device)
 
     @property
     def AA(self):

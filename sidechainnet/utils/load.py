@@ -368,27 +368,31 @@ def filter_dictionary_by_missing_residues(raw_data):
         "ums": [],
         "mod": []
     }
+    new_data = {item: [] for item in raw_data['train']}
     train = raw_data["train"]
     n_filtered_entries = 0
     total_entires = 0.
-    for seq, ang, crd, msk, evo, _id, res, sec, ums, mod in zip(
-            train['seq'], train['ang'], train['crd'], train['msk'], train['evo'],
-            train['ids'], train['res'], train['sec'], train['ums'], train['mod']):
+    for i in range(len(train['seq'])):
+    # for seq, ang, crd, msk, evo, _id, res, sec, ums, mod in zip(
+    #         train['seq'], train['ang'], train['crd'], train['msk'], train['evo'],
+    #         train['ids'], train['res'], train['sec'], train['ums'], train['mod']):
         total_entires += 1
-        if "-" in msk:
+        if "-" in train['msk'][i]:
             n_filtered_entries += 1
             continue
         else:
-            new_data["seq"].append(seq)
-            new_data["ang"].append(ang)
-            new_data["ids"].append(_id)
-            new_data["evo"].append(evo)
-            new_data["msk"].append(msk)
-            new_data["crd"].append(crd)
-            new_data["sec"].append(sec)
-            new_data["res"].append(res)
-            new_data["ums"].append(ums)
-            new_data["mod"].append(mod)
+            new_data["seq"].append(train['seq'][i])
+            new_data["ang"].append(train['ang'][i])
+            new_data["ids"].append(train['ids'][i])
+            new_data["evo"].append(train['evo'][i])
+            new_data["msk"].append(train['msk'][i])
+            new_data["crd"].append(train['crd'][i])
+            new_data["sec"].append(train['sec'][i])
+            new_data["res"].append(train['res'][i])
+            new_data["ums"].append(train['ums'][i])
+            new_data["mod"].append(train['mod'][i])
+            if "blens" in new_data:
+                new_data["blens"].append(train['blens'][i])
 
     if n_filtered_entries:
         print(f"{n_filtered_entries} ({n_filtered_entries/total_entires:.1%})"
