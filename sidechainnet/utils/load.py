@@ -104,7 +104,9 @@ def load(casp_version=12,
          filter_by_resolution=False,
          complete_structures_only=False,
          local_scn_path=None,
-         scn_dataset=False):
+         scn_dataset=False,
+         use_default_train_sampler=False,
+         id_filter=None):
     #: Okay
     """Load and return the specified SidechainNet dataset as a dictionary or DataLoaders.
 
@@ -270,6 +272,9 @@ def load(casp_version=12,
     if complete_structures_only:
         scn_dict = filter_dictionary_by_missing_residues(scn_dict)
 
+    if id_filter is not None:
+        scn_dict = filter_dictionary_by_id(scn_dict, id_filter=id_filter)
+
     # By default, the load function returns a dictionary
     if not with_pytorch and not scn_dataset:
         return scn_dict
@@ -286,7 +291,8 @@ def load(casp_version=12,
             seq_as_onehot=seq_as_onehot,
             dynamic_batching=dynamic_batching,
             optimize_for_cpu_parallelism=optimize_for_cpu_parallelism,
-            train_eval_downsample=train_eval_downsample)
+            train_eval_downsample=train_eval_downsample,
+            use_default_train_sampler=use_default_train_sampler)
 
     return
 
@@ -307,39 +313,28 @@ def filter_dictionary_by_resolution(raw_data, threshold=False):
         return raw_data
     if isinstance(threshold, bool) and threshold is True:
         threshold = 3
-    new_data = {
-        "seq": [],
-        "ang": [],
-        "ids": [],
-        "evo": [],
-        "msk": [],
-        "crd": [],
-        "sec": [],
-        "res": [],
-        "ums": [],
-        "mod": []
-    }
+    new_data = {item: [] for item in raw_data['train']}
     train = raw_data["train"]
     n_filtered_entries = 0
     total_entires = 0.
-    for seq, ang, crd, msk, evo, _id, res, sec, ums, mod in zip(
-            train['seq'], train['ang'], train['crd'], train['msk'], train['evo'],
-            train['ids'], train['res'], train['sec'], train['ums'], train['mod']):
+    for i in range(len(train['seq'])):
         total_entires += 1
-        if not res or res > threshold:
+        if not train['res'][i] or train['res'][i] > threshold:
             n_filtered_entries += 1
             continue
         else:
-            new_data["seq"].append(seq)
-            new_data["ang"].append(ang)
-            new_data["ids"].append(_id)
-            new_data["evo"].append(evo)
-            new_data["msk"].append(msk)
-            new_data["crd"].append(crd)
-            new_data["sec"].append(sec)
-            new_data["res"].append(res)
-            new_data["ums"].append(ums)
-            new_data["mod"].append(mod)
+            new_data["seq"].append(train['seq'][i])
+            new_data["ang"].append(train['ang'][i])
+            new_data["ids"].append(train['ids'][i])
+            new_data["evo"].append(train['evo'][i])
+            new_data["msk"].append(train['msk'][i])
+            new_data["crd"].append(train['crd'][i])
+            new_data["sec"].append(train['sec'][i])
+            new_data["res"].append(train['res'][i])
+            new_data["ums"].append(train['ums'][i])
+            new_data["mod"].append(train['mod'][i])
+            if "blens" in new_data:
+                new_data["blens"].append(train['blens'][i])
     if n_filtered_entries:
         print(f"{n_filtered_entries} ({n_filtered_entries/total_entires:.1%})"
               " training set entries were excluded based on resolution.")
@@ -356,18 +351,6 @@ def filter_dictionary_by_missing_residues(raw_data):
     Returns:
         Filtered dictionary.
     """
-    new_data = {
-        "seq": [],
-        "ang": [],
-        "ids": [],
-        "evo": [],
-        "msk": [],
-        "crd": [],
-        "sec": [],
-        "res": [],
-        "ums": [],
-        "mod": []
-    }
     new_data = {item: [] for item in raw_data['train']}
     train = raw_data["train"]
     n_filtered_entries = 0
@@ -400,6 +383,35 @@ def filter_dictionary_by_missing_residues(raw_data):
     raw_data["train"] = new_data
     return raw_data
 
+def filter_dictionary_by_id(raw_data, id_filter):
+    new_data = {item: [] for item in raw_data['train']}
+    train = raw_data["train"]
+    n_filtered_entries = 0
+    total_entires = 0.
+    for i in range(len(train['seq'])):
+        total_entires += 1
+        if train['ids'][i] not in id_filter:
+            n_filtered_entries += 1
+            continue
+        else:
+            new_data["seq"].append(train['seq'][i])
+            new_data["ang"].append(train['ang'][i])
+            new_data["ids"].append(train['ids'][i])
+            new_data["evo"].append(train['evo'][i])
+            new_data["msk"].append(train['msk'][i])
+            new_data["crd"].append(train['crd'][i])
+            new_data["sec"].append(train['sec'][i])
+            new_data["res"].append(train['res'][i])
+            new_data["ums"].append(train['ums'][i])
+            new_data["mod"].append(train['mod'][i])
+            if "blens" in new_data:
+                new_data["blens"].append(train['blens'][i])
+
+    if n_filtered_entries:
+        print(f"{n_filtered_entries} ({n_filtered_entries/total_entires:.1%})"
+              " training set entries were excluded based on id filtering.")
+    raw_data["train"] = new_data
+    return raw_data
 
 BOXURLS = {
     # CASP 12

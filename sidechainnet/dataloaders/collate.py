@@ -218,7 +218,8 @@ def prepare_dataloaders(data,
                         seq_as_onehot=None,
                         dynamic_batching=True,
                         optimize_for_cpu_parallelism=False,
-                        train_eval_downsample=0.1):
+                        train_eval_downsample=0.1,
+                        use_default_train_sampler=False):
     """Return dataloaders for model training according to user specifications.
 
     Using the pre-processed data, stored in a nested Python dictionary, this
@@ -241,28 +242,47 @@ def prepare_dataloaders(data,
 
     train_dataset = ProteinDataset(data['train'], 'train', data['settings'], data['date'])
 
-    train_loader = torch.utils.data.DataLoader(
-        train_dataset,
-        num_workers=num_workers,
-        collate_fn=collate_fn,
-        batch_sampler=SimilarLengthBatchSampler(
-            train_dataset,
-            batch_size,
-            dynamic_batch=batch_size *
-            data['settings']['lengths'].mean() if dynamic_batching else None,
-            optimize_batch_for_cpus=optimize_for_cpu_parallelism,
-        ))
+    
 
-    train_eval_loader = torch.utils.data.DataLoader(
-        train_dataset,
-        num_workers=num_workers,
-        collate_fn=collate_fn,
-        batch_sampler=SimilarLengthBatchSampler(
+    if use_default_train_sampler:
+        train_loader = torch.utils.data.DataLoader(
             train_dataset,
-            batch_size,
-            dynamic_batch=None,
-            optimize_batch_for_cpus=optimize_for_cpu_parallelism,
-            downsample=train_eval_downsample))
+            num_workers=num_workers,
+            collate_fn=collate_fn,
+            batch_size=batch_size,
+            drop_last=False)
+
+        train_eval_loader = torch.utils.data.DataLoader(
+            train_dataset,
+            num_workers=num_workers,
+            collate_fn=collate_fn,
+            batch_size=batch_size,
+            drop_last=False)
+    else:
+        train_loader = torch.utils.data.DataLoader(
+            train_dataset,
+            num_workers=num_workers,
+            collate_fn=collate_fn,
+            batch_sampler=SimilarLengthBatchSampler(
+                train_dataset,
+                batch_size,
+                dynamic_batch=batch_size *
+                data['settings']['lengths'].mean() if dynamic_batching else None,
+                optimize_batch_for_cpus=optimize_for_cpu_parallelism,
+            ))
+            
+        train_eval_loader = torch.utils.data.DataLoader(
+            train_dataset,
+            num_workers=num_workers,
+            collate_fn=collate_fn,
+            batch_sampler=SimilarLengthBatchSampler(
+                train_dataset,
+                batch_size,
+                dynamic_batch=None,
+                optimize_batch_for_cpus=optimize_for_cpu_parallelism,
+                downsample=train_eval_downsample))
+
+    
 
     valid_loaders = {}
     for vsplit in VALID_SPLITS:
