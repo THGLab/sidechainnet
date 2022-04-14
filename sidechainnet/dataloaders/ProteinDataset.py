@@ -33,6 +33,10 @@ class ProteinDataset(torch.utils.data.Dataset):
         self.mods = scn_data_split['mod']  # Arrays with 1 where non-std residues were standardized
         if 'blens' in scn_data_split:
             self.blens = scn_data_split['blens']
+        if 'sc-blens' in scn_data_split:
+            self.sc_blens = scn_data_split['sc-blens']
+        if 'sc-angs' in scn_data_split:
+            self.sc_angs = scn_data_split['sc-angs']
 
         # Add metadata
         self.casp_version = scn_data_settings['casp_version']
@@ -64,19 +68,20 @@ class ProteinDataset(torch.utils.data.Dataset):
         self.mods = [self.mods[i] for i in sorted_len_indices]
         if hasattr(self, 'blens'):
             self.blens = [self.blens[i] for i in sorted_len_indices]
+        if hasattr(self, 'sc_blens'):
+            self.blens = [self.sc_blens[i] for i in sorted_len_indices]
+        if hasattr(self, 'sc_angs'):
+            self.blens = [self.sc_angs[i] for i in sorted_len_indices]
 
     def __len__(self):
         return len(self.seqs)
 
     def __getitem__(self, idx):
-        if hasattr(self, 'blens'):
-            return (self.ids[idx], self.seqs[idx], self.msks[idx], self.evos[idx],
-                    self.secs[idx], self.angs[idx], self.crds[idx], self.resolutions[idx],
-                    self.mods[idx], self.str_seqs[idx], self.blens[idx])
-        else:
-            return (self.ids[idx], self.seqs[idx], self.msks[idx], self.evos[idx],
-                    self.secs[idx], self.angs[idx], self.crds[idx], self.resolutions[idx],
-                    self.mods[idx], self.str_seqs[idx])
+        all_attrs = ["ids", "seqs", "msks", "evos", "secs", "angs", "crds", "resolutions", 
+        "mods", "str_seqs", "blens", "sc_blens", "sc_angs"]
+        exist_attrs = [item for item in all_attrs if hasattr(self, item)]
+        return_tuple = tuple([getattr(self, item)[idx] for item in exist_attrs])
+        return return_tuple
 
     def __str__(self):
         """Describe this dataset to the user."""

@@ -71,6 +71,16 @@ class SCNDataset(object):
                 else:
                     bond_lengths = None
 
+                if 'sc-blens' in d:
+                    sidechain_bond_lengths = d['sc-blens'][i]
+                else:
+                    sidechain_bond_lengths = None
+
+                if 'sc-angs' in d:
+                    sidechain_bond_angles = d['sc-angs'][i]
+                else:
+                    sidechain_bond_angles = None
+
                 p = SCNProtein(coordinates=d['crd'][i],
                                angles=d['ang'][i],
                                sequence=d['seq'][i],
@@ -82,6 +92,8 @@ class SCNDataset(object):
                                is_modified=d['mod'][i],
                                id=d['ids'][i],
                                bond_lengths=bond_lengths,
+                               sidechain_bond_lengths=sidechain_bond_lengths,
+                               sidechain_bond_angles=sidechain_bond_angles,
                                split=split)
                 self.ids_to_SCNProtein[d['ids'][i]] = p
                 self.idx_to_SCNProtein[i] = p
@@ -141,6 +153,10 @@ class SCNProtein(object):
         self.angles = kwargs['angles']
         if kwargs['bond_lengths'] is not None:
             self.bond_lengths = kwargs['bond_lengths']
+        if kwargs['sidechain_bond_lengths'] is not None:
+            self.sidechain_bond_lengths = kwargs['sidechain_bond_lengths']
+        if kwargs['sidechain_bond_angles'] is not None:
+            self.sidechain_bond_angles = kwargs['sidechain_bond_angles']
         self.seq = kwargs['sequence']
         self.unmodified_seq = kwargs['unmodified_seq']
         self.mask = kwargs['mask']

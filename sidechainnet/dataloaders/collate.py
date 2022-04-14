@@ -15,7 +15,7 @@ from sidechainnet.utils.download import MAX_SEQ_LEN
 Batch = collections.namedtuple("Batch",
                                "pids seqs msks evos secs angs "
                                "crds int_seqs seq_evo_sec resolutions is_modified "
-                               "lengths str_seqs blens")
+                               "lengths str_seqs blens sc_blens sc_angs")
             
 
 
@@ -61,11 +61,15 @@ def get_collate_fn(aggregate_input, seqs_as_onehot=None):
         """
         # Instead of working with a list of tuples, we extract out each category of info
         # so it can be padded and re-provided to the user.
-        if len(insts[0]) == 10: # no bond lengths
-            pnids, sequences, masks, pssms, secs, angles, coords, resolutions, mods, str_seqs = list(zip(*insts))
-            bond_lens = None
-        elif len(insts[0]) == 11: # the last one is bond length
-            pnids, sequences, masks, pssms, secs, angles, coords, resolutions, mods, str_seqs, bond_lens = list(zip(*insts))
+        contents = list(zip(*insts))
+        pnids, sequences, masks, pssms, secs, angles, coords, resolutions, mods, str_seqs = contents[:10]
+        bond_lens = None
+        sc_bond_lens = None
+        sc_bond_angs = None
+        if len(insts[0]) >= 11: #  bond lengths are provided
+            bond_lens = contents[10]
+        if len(insts[0]) == 13: # bond lengths, side chain bond lengths and side chain bond angles are provided
+            sc_bond_lens, sc_bond_angs = contents[11:]
         lengths = tuple(len(s) for s in sequences)
         max_batch_len = max(lengths)
 
@@ -90,6 +94,7 @@ def get_collate_fn(aggregate_input, seqs_as_onehot=None):
         padded_crds = pad_for_batch(coords, max_batch_len, 'crd')
         padded_mods = pad_for_batch(mods, max_batch_len, 'msk')
 
+        # deal with fields that might be missing
         if bond_lens is not None:
             padded_blens = pad_for_batch(bond_lens, max_batch_len, 'ang')  # the data type of bond lengths is the same as angles
 
@@ -97,6 +102,22 @@ def get_collate_fn(aggregate_input, seqs_as_onehot=None):
             blens = padded_blens
         else:
             blens = None
+
+        if sc_bond_lens is not None:
+            padded_sc_blens = pad_for_batch(sc_bond_lens, max_batch_len, 'ang')  
+
+        if sc_bond_lens is not None:
+            sc_blens = padded_sc_blens
+        else:
+            sc_blens = None
+
+        if sc_bond_angs is not None:
+            padded_sc_angs = pad_for_batch(sc_bond_angs, max_batch_len, 'ang')  
+
+        if sc_bond_angs is not None:
+            sc_angs = padded_sc_angs
+        else:
+            sc_angs = None
 
         # Non-aggregated model input
         if not aggregate_input:
@@ -113,7 +134,9 @@ def get_collate_fn(aggregate_input, seqs_as_onehot=None):
                          is_modified=padded_mods,
                          lengths=lengths,
                          str_seqs=str_seqs,
-                         blens=blens)
+                         blens=blens,
+                         sc_blens=sc_blens,
+                         sc_angs=sc_angs)
 
 
         # Aggregated model input
@@ -135,7 +158,9 @@ def get_collate_fn(aggregate_input, seqs_as_onehot=None):
                          is_modified=padded_mods,
                          lengths=lengths,
                          str_seqs=str_seqs,
-                         blens=blens)
+                         blens=blens,
+                         sc_blens=sc_blens,
+                         sc_angs=sc_angs)
 
 
     return collate_fn
